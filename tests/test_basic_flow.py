@@ -1,5 +1,5 @@
 import os
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import pytest
 
@@ -95,14 +95,30 @@ def test_identity_train_complete_flow(generated_filesystem_loader):
                 }
             ])
 
+        with TemporaryDirectory() as dest_tmpdir:
+            raster_saver = RasterIOSceneExporter(destination=dest_tmpdir,
+                                                 srs_source_component="RGB",
+                                                 filename_pattern="{scene_id}.tiff",
+                                                 rasterio_creation_options={
+                                                     'blockxsize': 256,
+                                                     'blockysize': 256
+                                                 }
+            )
 
-        raster_saver = RasterIOSceneExporter(destination="/tmp/predictions/",
-                                             srs_source_component="RGB",
-                                             rasterio_creation_options={
-                                                 'blockxsize': 256,
-                                                 'blockysize': 256
-                                             }
-        )
+            dataset_loader.reset()
+            raster_saver.flow_prediction_from_source(dataset_loader, raster_predictor)
 
-        dataset_loader.reset()
-        raster_saver.flow_prediction_from_source(dataset_loader, raster_predictor)
+            import rasterio
+            import numpy as np
+
+            dataset_loader.reset()
+            for scene in dataset_loader:
+                input_file = scene[1]['RGB']
+                input_data = input_file.read()
+                os.listdir(dest_tmpdir)
+                prediction = os.path.join(dest_tmpdir,
+                                          os.path.split(input_file.name)[-1].replace('_RGB',''))
+
+                with rasterio.open(prediction) as prediction_file:
+                    prediction_data = prediction_file.read()
+                    np.testing.assert_array_equal(input_data, prediction_data)

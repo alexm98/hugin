@@ -90,13 +90,13 @@ def generate_filesystem_loader(width=2131, height=1979, size=35, num_images=10):
     base_kwargs = {
         'data_pattern': r"(?P<name>[0-9A-Za-z]+)_(?P<SECOND>[A-Za-z0-9]+)_(?P<THIRD>[A-Za-z0-9]+)\.tiff$",
         'type_format': "{SECOND}",
-        'id_format': "{name}-{THIRD}",
+        'id_format': "{name}_{THIRD}",
         'input_source': tempdir_name,
         'validation_percent': 0.2
     }
 
     loader = FileSystemLoader(**base_kwargs)
-    loader.__temp_input_directory = tempdir_name
+    loader.__temp_input_directory = tempdir
 
     return loader
 
