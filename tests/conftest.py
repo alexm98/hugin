@@ -11,6 +11,7 @@ import random
 
 def generate_filesystem_loader(width=2131, height=1979, size=35, num_images=10):
     tempdir = TemporaryDirectory("-hugin")
+    tempdir_name = tempdir.name
     random.seed(42)
 
     match_color = "red"
@@ -47,8 +48,8 @@ def generate_filesystem_loader(width=2131, height=1979, size=35, num_images=10):
             if match_color == color:
                 mdraw.ellipse([(startx, starty), (endx, endy)], fill=color)
 
-        fname = os.path.join(tempdir.name, "TEST_RGB_{}.tiff".format(imgidx+1))
-        mname = os.path.join(tempdir.name, "TEST_GTI_{}.tiff".format(imgidx+1))
+        fname = os.path.join(tempdir_name, "TEST_RGB_{}.tiff".format(imgidx+1))
+        mname = os.path.join(tempdir_name, "TEST_GTI_{}.tiff".format(imgidx+1))
 
         res = 0.5
         transform = from_origin(21.2086, 45.7488, res, res)
@@ -76,6 +77,10 @@ def generate_filesystem_loader(width=2131, height=1979, size=35, num_images=10):
             tiled=True,
             crs={'init': 'epsg:3857'},
         )
+        data = np.array(im.getdata()).reshape(data.shape).astype(np.uint8)
+        new_data_mask = np.array(mask.getdata())
+        data_mask = new_data_mask.reshape(data_mask.shape)
+        data_mask = data_mask.astype(np.uint8)
         for i in range(0, data.shape[-1]):
             rgb_image.write(data[:,:,i], i+1)
         gti_image.write(data_mask, 1)
@@ -86,12 +91,12 @@ def generate_filesystem_loader(width=2131, height=1979, size=35, num_images=10):
         'data_pattern': r"(?P<name>[0-9A-Za-z]+)_(?P<SECOND>[A-Za-z0-9]+)_(?P<THIRD>[A-Za-z0-9]+)\.tiff$",
         'type_format': "{SECOND}",
         'id_format': "{name}-{THIRD}",
-        'input_source': tempdir.name,
+        'input_source': tempdir_name,
         'validation_percent': 0.2
     }
 
     loader = FileSystemLoader(**base_kwargs)
-    loader.__temp_input_directory = tempdir
+    loader.__temp_input_directory = tempdir_name
 
     return loader
 
