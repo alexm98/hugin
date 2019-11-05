@@ -140,8 +140,8 @@ class NullMerger(PredictionMerger):
 class AverageMerger(PredictionMerger):
     def __init__(self, *args, **kwargs):
         super(AverageMerger, self).__init__(*args, **kwargs)
-        self.tile_array = np.zeros((self.width, self.height, self.depth), dtype=self.dtype)
-        self.tile_freq_array = np.zeros((self.width, self.height), dtype=np.uint8)
+        self.tile_array = np.zeros((self.height, self.width, self.depth), dtype=self.dtype)
+        self.tile_freq_array = np.zeros((self.height, self.width), dtype=np.uint8)
 
     def update(self, xstart, xend, ystart, yend, prediction):
         self.tile_array[xstart: xend, ystart: yend] += prediction
