@@ -4,7 +4,8 @@ from tempfile import NamedTemporaryFile
 import pytest
 
 from hugin.engine.core import IdentityModel, AverageMerger
-from hugin.engine.scene import RasterSceneTrainer, AvgEnsembleScenePredictor, RasterScenePredictor
+from hugin.engine.scene import RasterSceneTrainer, AvgEnsembleScenePredictor, RasterScenePredictor, \
+    RasterIOSceneExporter
 from hugin.io.loader import BinaryCategoricalConverter
 from tests.conftest import generate_filesystem_loader
 
@@ -69,13 +70,18 @@ def test_identity_train_complete_flow(generated_filesystem_loader, small_generat
             dataset_loader.loop = loop_dataset_loader_old
             validation_loader.loop = loop_validation_loader_old
 
+
+        new_mapping = mapping.copy()
+        del new_mapping['target']
+
         raster_predictor = RasterScenePredictor(
             name="simple_raster_scene_predictor",
             model=identity_model,
             stride_size=256,
             window_size=(256, 256),
-            mapping=mapping,
+            mapping=new_mapping,
             prediction_merger=AverageMerger,
+            post_processors=[]
         )
         avg_predictor = AvgEnsembleScenePredictor(
             name="simple_avg_ensable",
@@ -85,3 +91,15 @@ def test_identity_train_complete_flow(generated_filesystem_loader, small_generat
                     'weight': 1
                 }
             ])
+
+
+        raster_saver = RasterIOSceneExporter(destination="/tmp/predictions/",
+                                             srs_source_component="RGB",
+                                             rasterio_creation_options={
+                                                 'blockxsize': 256,
+                                                 'blockysize': 256
+                                             }
+        )
+
+        dataset_loader.reset()
+        raster_saver.flow_prediction_from_source(dataset_loader, raster_predictor)
