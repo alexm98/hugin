@@ -16,7 +16,7 @@ from tests.conftest import generate_filesystem_loader
 
 
 # @pytest.mark.skipif(not runningInCI(), reason="Skipping running locally as it might be too slow")
-def test_identity_train_complete_flow(generated_filesystem_loader):
+def test_identity_complete_flow(generated_filesystem_loader):
     mapping = {
         'inputs': {
             'input_1': {
@@ -42,10 +42,16 @@ def test_identity_train_complete_flow(generated_filesystem_loader):
         }
     }
 
+    test_identity_training(generated_filesystem_loader, IdentityModel, mapping)
+    test_identity_prediction(generated_filesystem_loader, IdentityModel, mapping)
+
+
+@pytest.mark.skip(reason="This gets called in test_identiy_complete_flow")
+def test_identity_training(loader, model, mapping):
     with NamedTemporaryFile(delete=False) as named_temporary_file:
         named_tmp = named_temporary_file.name
         os.remove(named_temporary_file.name)
-        identity_model = IdentityModel(name="dummy_identity_model", num_loops=3)
+        identity_model = model(name="dummy_identity_model", num_loops=3)
         trainer = RasterSceneTrainer(name="test_raster_trainer",
                                      stride_size=256,
                                      window_size=(256, 256),
@@ -53,7 +59,7 @@ def test_identity_train_complete_flow(generated_filesystem_loader):
                                      mapping=mapping,
                                      destination=named_tmp)
 
-        dataset_loader, validation_loader = generated_filesystem_loader.get_dataset_loaders()
+        dataset_loader, validation_loader = loader.get_dataset_loaders()
         loop_dataset_loader_old = dataset_loader.loop
         loop_validation_loader_old = validation_loader.loop
 
@@ -72,6 +78,10 @@ def test_identity_train_complete_flow(generated_filesystem_loader):
             dataset_loader.loop = loop_dataset_loader_old
             validation_loader.loop = loop_validation_loader_old
 
+@pytest.mark.skip(reason="This gets called in test_identity_complete_flow")
+def test_identity_prediction(loader, model, mapping):
+        dataset_loader, validation_loader = loader.get_dataset_loaders()
+        identity_model = model(name="dummy_identity_model", num_loops=3)
 
         new_mapping = mapping.copy()
         del new_mapping['target']
@@ -86,14 +96,15 @@ def test_identity_train_complete_flow(generated_filesystem_loader):
             prediction_merger=NullMerger,
             post_processors=[]
         )
-        avg_predictor = AvgEnsembleScenePredictor(
-            name="simple_avg_ensable",
-            predictors=[
-                {
-                    'predictor': raster_predictor,
-                    'weight': 1
-                }
-            ])
+
+        # avg_predictor = AvgEnsembleScenePredictor(
+        #     name="simple_avg_ensable",
+        #     predictors=[
+        #         {
+        #             'predictor': raster_predictor,
+        #             'weight': 1
+        #         }
+        #     ])
 
         with TemporaryDirectory() as dest_tmpdir:
             raster_saver = RasterIOSceneExporter(destination=dest_tmpdir,
