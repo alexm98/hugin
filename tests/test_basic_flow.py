@@ -3,26 +3,28 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-from hugin.engine.core import IdentityModel, AverageMerger
+from hugin.engine.core import IdentityModel, AverageMerger, NullMerger
 from hugin.engine.scene import RasterSceneTrainer, AvgEnsembleScenePredictor, RasterScenePredictor, \
     RasterIOSceneExporter
 from hugin.io.loader import BinaryCategoricalConverter
 from tests.conftest import generate_filesystem_loader
 
 
-@pytest.fixture
-def small_generated_filesystem_loader():
-    return generate_filesystem_loader(num_images=4, width=500, height=510)
+#@pytest.fixture
+#def small_generated_filesystem_loader():
+#    return generate_filesystem_loader(num_images=4, width=500, height=510)
 
 
 # @pytest.mark.skipif(not runningInCI(), reason="Skipping running locally as it might be too slow")
-def test_identity_train_complete_flow(generated_filesystem_loader, small_generated_filesystem_loader):
+def test_identity_train_complete_flow(generated_filesystem_loader):
     mapping = {
         'inputs': {
             'input_1': {
                 'primary': True,
                 'channels': [
-                    ["RGB", 1]
+                    ["RGB", 1],
+                    ["RGB", 2],
+                    ["RGB", 3]
                 ]
             }
         },
@@ -80,7 +82,8 @@ def test_identity_train_complete_flow(generated_filesystem_loader, small_generat
             stride_size=256,
             window_size=(256, 256),
             mapping=new_mapping,
-            prediction_merger=AverageMerger,
+            #prediction_merger=AverageMerger,
+            prediction_merger=NullMerger,
             post_processors=[]
         )
         avg_predictor = AvgEnsembleScenePredictor(
