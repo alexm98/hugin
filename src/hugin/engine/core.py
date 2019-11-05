@@ -211,7 +211,12 @@ class IdentityModel(RasterModel):
             for j in range(0, vdata):
                 data = next(validation_data)
 
+    def predict(self, batch, batch_size=None):
+        return batch
+
+
     def save(self, destination=None):
+        # raise NotImplementedError()
         pass
 
 
