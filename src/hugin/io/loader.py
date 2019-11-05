@@ -186,6 +186,7 @@ class TileGenerator(object):
             y_end = y_start + window_height
             if y_end > image_height:
                 y_start = image_height - window_height
+                y_end = y_start + window_height
 
             ytile += 1
             xtile = 0
@@ -194,6 +195,7 @@ class TileGenerator(object):
                 x_end = x_start + window_width
                 if x_end > image_width:
                     x_start = image_width - window_width
+                    x_end = x_start + window_width
 
                 xtile += 1
 
