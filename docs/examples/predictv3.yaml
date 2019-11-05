@@ -30,7 +30,7 @@ predictor: !!python/object/apply:hugin.infer.scene.AvgEnsembleScenePredictor
             prediction_merger: !!python/name:hugin.infer.core.AverageMerger
         weight: 1
     post_processors:
-      #- !!python/name:hugin.infer.core.identity_processor
+      #- !!python/name:hugin.engine.core.identity_processor
       - !!python/object/apply:hugin.infer.core.CategoricalConverter
           kwds:
             num_classes: 6
