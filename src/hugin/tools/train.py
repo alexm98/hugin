@@ -3,13 +3,13 @@ import tempfile
 
 __license__ = \
     """Copyright 2019 West University of Timisoara
-    
+
        Licensed under the Apache License, Version 2.0 (the "License");
        you may not use this file except in compliance with the License.
        You may obtain a copy of the License at
-    
+
            http://www.apache.org/licenses/LICENSE-2.0
-    
+
        Unless required by applicable law or agreed to in writing, software
        distributed under the License is distributed on an "AS IS" BASIS,
        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -135,7 +135,7 @@ def train_keras(model_name,
         log.info("Setting Tensorflow random seed to: %d", random_seed)
         try:
             tf.set_random_seed(random_seed)
-        except AttributeError: # Tf 2.0 fix
+        except AttributeError:  # Tf 2.0 fix
             tf.random.set_seed(random_seed)
 
     from keras.callbacks import EarlyStopping, TensorBoard, ReduceLROnPlateau
@@ -167,9 +167,7 @@ def train_keras(model_name,
                                default_window_size=window_size,
                                default_stride_size=stride_size)
 
-    #train_data = ThreadedDataGenerator(train_data, queue_size=prefetch_queue_size)
-
-
+    # train_data = ThreadedDataGenerator(train_data, queue_size=prefetch_queue_size)
 
     model_builder, model_builder_custom_options = import_model_builder(model_config["model_builder"])
     model_builder_option = model_config.get("options", {})
@@ -191,11 +189,11 @@ def train_keras(model_name,
 
         validation_data = ThreadedDataGenerator(validation_data, queue_size=prefetch_queue_size)
 
-        validation_steps_per_epoch = getattr(model_config, "validation_steps_per_epoch", len(validation_data) // batch_size)
+        validation_steps_per_epoch = getattr(model_config, "validation_steps_per_epoch",
+                                             len(validation_data) // batch_size)
 
         log.info("Validation data has %d tiles", len(validation_data))
         log.info("validation_steps_per_epoch: %d", validation_steps_per_epoch)
-
 
     load_only_weights = model_config.get("load_only_weights", False)
     checkpoint = model_config.get("checkpoint", None)
