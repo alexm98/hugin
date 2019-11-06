@@ -18,7 +18,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Hugin EO'
-copyright = '2019, Marian Neagul, Teodora Selea, Gabriel Iuhasz, Alexandru Munteanu'
+copyright = '2019, HuginEO Contributors'
 author = 'Marian Neagul, Teodora Selea, Gabriel Iuhasz, Alexandru Munteanu'
 
 # The full version, including alpha/beta/rc tags

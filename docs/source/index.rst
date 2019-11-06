@@ -4,7 +4,7 @@ Hugin EO: Machine Learning for Earth Observation made easy
 
 Hugin helps scientists run Machine Learning experiments on geospatial raster data.
 
-Hugin was developed as part of the ML4EO_
+Hugin was developed as part of the ESA funded ML4EO_
 
 Overall Hugin aims to facilitate experimentation with multiple machine learning problems, like:
  * Classification
