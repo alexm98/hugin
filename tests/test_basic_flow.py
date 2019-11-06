@@ -14,10 +14,9 @@ from tests.conftest import generate_filesystem_loader
 #def small_generated_filesystem_loader():
 #    return generate_filesystem_loader(num_images=4, width=500, height=510)
 
-
-# @pytest.mark.skipif(not runningInCI(), reason="Skipping running locally as it might be too slow")
-def test_identity_complete_flow(generated_filesystem_loader):
-    mapping = {
+@pytest.fixture
+def mapping():
+    mapping_conf = {
         'inputs': {
             'input_1': {
                 'primary': True,
@@ -41,7 +40,28 @@ def test_identity_complete_flow(generated_filesystem_loader):
             }
         }
     }
+    return mapping_conf
 
+"""
+@pytest.fixture
+def raster_predictors(mapping):
+    identity_model = IdentityModel(name="dummy_identity_model", num_loops=3)
+    raster_predictor = RasterScenePredictor(
+            name="simple_raster_scene_predictor",
+            model=identity_model,
+            stride_size=256,
+            window_size=(256, 256),
+            mapping=mapping,
+            #prediction_merger=AverageMerger,
+            prediction_merger=NullMerger,
+            post_processors=[]
+    )
+
+    return raster_predictor
+"""
+
+# @pytest.mark.skipif(not runningInCI(), reason="Skipping running locally as it might be too slow")
+def test_identity_complete_flow(generated_filesystem_loader, mapping):
     _test_identity_training(generated_filesystem_loader, IdentityModel, mapping)
     new_mapping = mapping.copy()
     del new_mapping['target']
