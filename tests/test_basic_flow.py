@@ -42,12 +42,14 @@ def test_identity_complete_flow(generated_filesystem_loader):
         }
     }
 
-    test_identity_training(generated_filesystem_loader, IdentityModel, mapping)
-    test_identity_prediction(generated_filesystem_loader, IdentityModel, mapping)
-    test_identity_avg_prediction(generated_filesystem_loader, IdentityModel, mapping)
+    _test_identity_training(generated_filesystem_loader, IdentityModel, mapping)
+    new_mapping = mapping.copy()
+    del new_mapping['target']
+    _test_identity_prediction(generated_filesystem_loader, IdentityModel, new_mapping)
+    _test_identity_avg_prediction(generated_filesystem_loader, IdentityModel, new_mapping)
 
-@pytest.mark.skip(reason="This gets called in test_identiy_complete_flow")
-def test_identity_training(loader, model, mapping):
+
+def _test_identity_training(loader, model, mapping):
     with NamedTemporaryFile(delete=False) as named_temporary_file:
         named_tmp = named_temporary_file.name
         os.remove(named_temporary_file.name)
@@ -78,33 +80,21 @@ def test_identity_training(loader, model, mapping):
             dataset_loader.loop = loop_dataset_loader_old
             validation_loader.loop = loop_validation_loader_old
 
-@pytest.mark.skip(reason="This gets called in test_identity_complete_flow")
-def test_identity_prediction(loader, model, mapping):
+
+def _test_identity_prediction(loader, model, mapping):
         dataset_loader, validation_loader = loader.get_dataset_loaders()
         identity_model = model(name="dummy_identity_model", num_loops=3)
-
-        new_mapping = mapping.copy()
-        del new_mapping['target']# move before
 
         raster_predictor = RasterScenePredictor(
             name="simple_raster_scene_predictor",
             model=identity_model,
             stride_size=256,
             window_size=(256, 256),
-            mapping=new_mapping,
+            mapping=mapping,
             #prediction_merger=AverageMerger,
             prediction_merger=NullMerger,
             post_processors=[]
         )
-
-        # avg_predictor = AvgEnsembleScenePredictor(
-        #     name="simple_avg_ensable",
-        #     predictors=[
-        #         {
-        #             'predictor': raster_predictor,
-        #             'weight': 1
-        #         }
-        #     ])
 
         with TemporaryDirectory() as dest_tmpdir:
             raster_saver = RasterIOSceneExporter(destination=dest_tmpdir,
@@ -134,21 +124,16 @@ def test_identity_prediction(loader, model, mapping):
                     np.testing.assert_array_equal(input_data, prediction_data)
 
 
-
-@pytest.mark.skip(reason="This gets called in test_identity_complete_flow")
-def test_identity_avg_prediction(loader, model, mapping):
+def _test_identity_avg_prediction(loader, model, mapping):
         dataset_loader, validation_loader = loader.get_dataset_loaders()
         identity_model = model(name="dummy_identity_model", num_loops=3)
-
-        new_mapping = mapping.copy()
-        del new_mapping['target']
 
         raster_predictor_1 = RasterScenePredictor(
             name="simple_raster_scene_predictor",
             model=identity_model,
             stride_size=256,
             window_size=(256, 256),
-            mapping=new_mapping,
+            mapping=mapping,
             #prediction_merger=AverageMerger,
             prediction_merger=NullMerger,
             post_processors=[],
@@ -160,7 +145,11 @@ def test_identity_avg_prediction(loader, model, mapping):
             name="simple_avg_ensable",
             predictors=[
                 {
-                    'predictor': [raster_predictor_1, raster_predictor_2],
+                    'predictor': raster_predictor_1,
+                    'weight': 1
+                },
+                {
+                    'predictor': raster_predictor_2,
                     'weight': 1
                 }
             ])
@@ -178,7 +167,6 @@ def test_identity_avg_prediction(loader, model, mapping):
             dataset_loader.reset()
             raster_saver.flow_prediction_from_source(dataset_loader, avg_predictor)
 
-            """
             import rasterio
             import numpy as np
 
@@ -191,6 +179,5 @@ def test_identity_avg_prediction(loader, model, mapping):
 
                 with rasterio.open(prediction) as prediction_file:
                     prediction_data = prediction_file.read()
-                    np.testing.assert_array_equal(input_data, prediction_data)
-            """
-
+                    np.testing.assert_array_equal((input_data + input_data) / 2.0,
+                                                  prediction_data)
