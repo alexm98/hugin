@@ -14,10 +14,9 @@ from tests.conftest import generate_filesystem_loader
 #def small_generated_filesystem_loader():
 #    return generate_filesystem_loader(num_images=4, width=500, height=510)
 
-
-# @pytest.mark.skipif(not runningInCI(), reason="Skipping running locally as it might be too slow")
-def test_identity_complete_flow(generated_filesystem_loader):
-    mapping = {
+@pytest.fixture
+def mapping():
+    mapping_conf = {
         'inputs': {
             'input_1': {
                 'primary': True,
@@ -41,13 +40,36 @@ def test_identity_complete_flow(generated_filesystem_loader):
             }
         }
     }
+    return mapping_conf
 
-    test_identity_training(generated_filesystem_loader, IdentityModel, mapping)
-    test_identity_prediction(generated_filesystem_loader, IdentityModel, mapping)
+"""
+@pytest.fixture
+def raster_predictors(mapping):
+    identity_model = IdentityModel(name="dummy_identity_model", num_loops=3)
+    raster_predictor = RasterScenePredictor(
+            name="simple_raster_scene_predictor",
+            model=identity_model,
+            stride_size=256,
+            window_size=(256, 256),
+            mapping=mapping,
+            #prediction_merger=AverageMerger,
+            prediction_merger=NullMerger,
+            post_processors=[]
+    )
+
+    return raster_predictor
+"""
+
+# @pytest.mark.skipif(not runningInCI(), reason="Skipping running locally as it might be too slow")
+def test_identity_complete_flow(generated_filesystem_loader, mapping):
+    _test_identity_training(generated_filesystem_loader, IdentityModel, mapping)
+    new_mapping = mapping.copy()
+    del new_mapping['target']
+    _test_identity_prediction(generated_filesystem_loader, IdentityModel, new_mapping)
+    _test_identity_avg_prediction(generated_filesystem_loader, IdentityModel, new_mapping)
 
 
-@pytest.mark.skip(reason="This gets called in test_identiy_complete_flow")
-def test_identity_training(loader, model, mapping):
+def _test_identity_training(loader, model, mapping):
     with NamedTemporaryFile(delete=False) as named_temporary_file:
         named_tmp = named_temporary_file.name
         os.remove(named_temporary_file.name)
@@ -78,33 +100,21 @@ def test_identity_training(loader, model, mapping):
             dataset_loader.loop = loop_dataset_loader_old
             validation_loader.loop = loop_validation_loader_old
 
-@pytest.mark.skip(reason="This gets called in test_identity_complete_flow")
-def test_identity_prediction(loader, model, mapping):
+
+def _test_identity_prediction(loader, model, mapping):
         dataset_loader, validation_loader = loader.get_dataset_loaders()
         identity_model = model(name="dummy_identity_model", num_loops=3)
-
-        new_mapping = mapping.copy()
-        del new_mapping['target']
 
         raster_predictor = RasterScenePredictor(
             name="simple_raster_scene_predictor",
             model=identity_model,
             stride_size=256,
             window_size=(256, 256),
-            mapping=new_mapping,
+            mapping=mapping,
             #prediction_merger=AverageMerger,
             prediction_merger=NullMerger,
             post_processors=[]
         )
-
-        # avg_predictor = AvgEnsembleScenePredictor(
-        #     name="simple_avg_ensable",
-        #     predictors=[
-        #         {
-        #             'predictor': raster_predictor,
-        #             'weight': 1
-        #         }
-        #     ])
 
         with TemporaryDirectory() as dest_tmpdir:
             raster_saver = RasterIOSceneExporter(destination=dest_tmpdir,
@@ -126,10 +136,68 @@ def test_identity_prediction(loader, model, mapping):
             for scene in dataset_loader:
                 input_file = scene[1]['RGB']
                 input_data = input_file.read()
-                os.listdir(dest_tmpdir)
                 prediction = os.path.join(dest_tmpdir,
                                           os.path.split(input_file.name)[-1].replace('_RGB',''))
 
                 with rasterio.open(prediction) as prediction_file:
                     prediction_data = prediction_file.read()
                     np.testing.assert_array_equal(input_data, prediction_data)
+
+
+def _test_identity_avg_prediction(loader, model, mapping):
+        dataset_loader, validation_loader = loader.get_dataset_loaders()
+        identity_model = model(name="dummy_identity_model", num_loops=3)
+
+        raster_predictor_1 = RasterScenePredictor(
+            name="simple_raster_scene_predictor",
+            model=identity_model,
+            stride_size=256,
+            window_size=(256, 256),
+            mapping=mapping,
+            #prediction_merger=AverageMerger,
+            prediction_merger=NullMerger,
+            post_processors=[],
+        )
+
+        raster_predictor_2 = raster_predictor_1
+
+        avg_predictor = AvgEnsembleScenePredictor(
+            name="simple_avg_ensable",
+            predictors=[
+                {
+                    'predictor': raster_predictor_1,
+                    'weight': 1
+                },
+                {
+                    'predictor': raster_predictor_2,
+                    'weight': 1
+                }
+            ])
+
+        with TemporaryDirectory() as dest_tmpdir:
+            raster_saver = RasterIOSceneExporter(destination=dest_tmpdir,
+                                                 srs_source_component="RGB",
+                                                 filename_pattern="{scene_id}.tiff",
+                                                 rasterio_creation_options={
+                                                     'blockxsize': 256,
+                                                     'blockysize': 256
+                                                 }
+            )
+
+            dataset_loader.reset()
+            raster_saver.flow_prediction_from_source(dataset_loader, avg_predictor)
+
+            import rasterio
+            import numpy as np
+
+            dataset_loader.reset()
+            for scene in dataset_loader:
+                input_file = scene[1]['RGB']
+                input_data = input_file.read()
+                prediction = os.path.join(dest_tmpdir,
+                                          os.path.split(input_file.name)[-1].replace('_RGB',''))
+
+                with rasterio.open(prediction) as prediction_file:
+                    prediction_data = prediction_file.read()
+                    np.testing.assert_array_equal((input_data + input_data) / 2.0,
+                                                  prediction_data)
