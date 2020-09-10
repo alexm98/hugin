@@ -27,6 +27,7 @@ import numpy as np
 from keras.utils import to_categorical
 
 from rasterio.windows import Window
+import os
 
 log = logging.getLogger(__name__)
 
@@ -40,15 +41,22 @@ class NullFormatConverter(object):
 
 
 class CategoricalConverter(object):
-    def __init__(self, num_classes=2):
+    def __init__(self, num_classes=2, channel_last=False):
         self._num_classes = num_classes
+        self._channel_last = channel_last
 
     def __call__(self, entry):
-        # entry = entry.reshape(entry.shape + (1, ))
+        old_shape = entry
+        entry = entry.reshape(entry.shape + (1, ))
+        entry = np.squeeze(entry)
         cat = to_categorical(entry, self._num_classes)
+        old_cat = cat
+        if not self._channel_last:
+            #cat = np.swapaxes(np.swapaxes(cat, 0, 1), 1, 2)
+            cat = np.swapaxes(np.swapaxes(cat, 2, 1), 1, 0) # how an I save?
         return cat
 
-
+   
 class BinaryCategoricalConverter(CategoricalConverter):
     """
     Converter used for representing Urband3D Ground Truth / GTI
@@ -75,6 +83,38 @@ class MultiClassToBinaryCategoricalConverter(BinaryCategoricalConverter):
         entry[entry != self.class_label] = 0
         return BinaryCategoricalConverter.__call__(self, entry)
 
+class MulticlassRemappingConverter(CategoricalConverter):
+    def __init__(self, *args, mapping={}, **kw):
+        if isinstance(mapping, dict):
+            self._mapping = mapping.items()
+        elif isinstance(mapping, list) or isinstance(mapping, tuple):
+            self._mapping = mapping
+        else:
+            raise ValueError("Unsupported format for mapping. Should be list, tuple or dictionary")
+        CategoricalConverter.__init__(self, *args, **kw)
+
+    def __call__(self, entry):
+        for old_id, new_id in self._mapping:
+            entry[entry == old_id] = new_id
+        return CategoricalConverter.__call__(self, entry)
+
+class MulticlassSparseRemapping(object):
+    def __init__(self, mapping={}):
+        if isinstance(mapping, dict):
+            self._mapping = mapping.items()
+        elif isinstance(mapping, list) or isinstance(mapping, tuple):
+            self._mapping = mapping
+        else:
+            raise ValueError("Unsupported format for mapping. Should be list, tuple or dictionary")
+
+    def __call__(self, entry):
+        for old_id, new_id in self._mapping:
+            entry[entry == old_id] = new_id
+        return entry
+
+
+
+
 
 class ColorMapperConverter(object):
     def __init__(self, color_map):
@@ -85,9 +125,15 @@ class ColorMapperConverter(object):
         pass
 
 
-def adapt_shape_and_stride(scene, base_scene, shape, stride, offset='ul'):
+def adapt_shape_and_stride(scene, base_scene, shape, stride, offset='center'):
     if scene == base_scene:
         return shape, stride
+
+    # The following snipped is a workaround for intermitent issues regarding coregistration between input scene and GTI, even if they are of the same resolution
+    # Should be fixed by getting rid of cartesian indexing and using only geographical indexing
+    if scene.crs == base_scene.crs: ### ToDo: FixMe
+        return shape, stride
+   
     x_geo_orig, y_geo_orig = base_scene.xy(shape[0], shape[1], offset=offset)
 
     computed_shape = scene.index(x_geo_orig, y_geo_orig)
@@ -96,7 +142,7 @@ def adapt_shape_and_stride(scene, base_scene, shape, stride, offset='ul'):
     return computed_shape, computed_stride
 
 class TileGenerator(object):
-    def __init__(self, scene, shape=None, mapping=(), stride=None, swap_axes=False, normalize=False, copy=False):
+    def __init__(self, scene, shape=None, mapping=(), stride=None, swap_axes=False, normalize=False, copy=False, squeze_data=False):
         """
         @shape: specify the shape of the window/tile. None means the window covers the whole image
         @stride: the stride used for moving the windows
@@ -110,6 +156,7 @@ class TileGenerator(object):
         self._normalize = normalize
         self._count = 0
         self._copy = copy
+        self._squeze_data = squeze_data
         if self._stride is None and self._shape is not None:
             self._stride = self._shape[0]
 
@@ -158,7 +205,7 @@ class TileGenerator(object):
         if not mapping: return
 
         window_width, window_height = target_shape
-
+        
         mapping_level_preprocessing = mapping.get('preprocessing', [])
         augmented_mapping = augment_mapping_with_datasets(dataset, mapping)
 
@@ -221,6 +268,7 @@ class TileGenerator(object):
 
                     if buffer is None:
                         buffer = np.zeros((len(augmented_mapping),) + band.shape, dtype=band.dtype)
+
                     if buffer.dtype != band.dtype:
                         buffer = buffer.astype(np.find_common_type([buffer.dtype, band.dtype], []))
                     buffer[count - 1] = band
@@ -228,8 +276,16 @@ class TileGenerator(object):
                 img_data = buffer if not self._copy else buffer.copy()
                 count = 0
 
+                # # the next code block is for fixing the issue of multilabel categorical output
+                #if img_data.shape[0] == 1: #### hackish. # ToDo: fix me
+                #     img_data = img_data.reshape(img_data.shape[1:])
+                #if img_data.shape[0] == 1 or img_data.shape[-1] == 1:
+                #    img_data = np.squeeze(img_data)
+                if self._squeze_data:
+                    img_data = np.squeeze(img_data)
                 if self.swap_axes:
                     img_data = np.swapaxes(np.swapaxes(img_data, 0, 1), 1, 2)
+
                 yield img_data
 
     def generate_tiles_for_dataset(self):
@@ -238,20 +294,14 @@ class TileGenerator(object):
             output_mapping = {}
         output_generators = {}
         input_generators = {}
-        primary_mapping = [v for k, v in input_mapping.items() if v.get("primary", False)][0]
-        primary_shape = primary_mapping['window_shape']
-        primary_stride = primary_mapping['stride']
-        primary_channels = primary_mapping['channels']
-        primary_base_scene = self._scene[primary_channels[0][0]]
 
         for mapping_name, mapping in input_mapping.items():
-            base_channel = mapping['channels'][0][0]
             target_shape, target_stride = mapping["window_shape"], mapping["stride"]
+            
             input_generators[mapping_name] = self._generate_tiles_for_mapping(self._scene, mapping, target_shape,
                                                                               target_stride)
 
         for mapping_name, mapping in output_mapping.items():
-            base_channel = mapping['channels'][0][0]
             target_shape, target_stride = mapping["window_shape"], mapping["stride"]
             output_generators[mapping_name] = self._generate_tiles_for_mapping(self._scene, mapping, target_shape,
                                                                                target_stride)
@@ -357,8 +407,10 @@ class DataGenerator(object):
         self._primary_mapping = primary_mapping
 
         self._datasets = datasets
-
-        primary_mapping_type_id = self._primary_mapping['channels'][0][0]
+        if isinstance(self._primary_mapping, dict):
+            primary_mapping_type_id = self._primary_mapping['channels'][0]['type']
+        else:
+            primary_mapping_type_id = self._primary_mapping['channels'][0][0]
         first = next(self._datasets)
         scene_id, scene_data = first
 
@@ -567,9 +619,11 @@ class DataGenerator(object):
 
 
 class ThreadedDataGenerator(threading.Thread):
-    def __init__(self, data_generator, queue_size=4):
-        self._queue_size = queue_size
+    def __init__(self, data_generator, queue_size=None):
         self._data_generator = data_generator
+        if queue_size is None:
+            queue_size = int(os.environ.get('HUGIN_DATA_GENERATOR_QUEUE_SIZE', 4))
+        self._queue_size = queue_size
         self._q = Queue(maxsize=self._queue_size)
         self._len = len(self._data_generator)
         self._data_generator_flow = self._flow_data()

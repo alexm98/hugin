@@ -7,10 +7,13 @@ import numpy as np
 import rasterio
 
 from logging import getLogger
+
+from hugin.io import ThreadedDataGenerator
 from tempfile import TemporaryFile, NamedTemporaryFile
 
 from hugin.engine.core import metric_processor
 from hugin.io.loader import CategoricalConverter as TrainingCategoricalConverter
+from hugin.io.loader import NullFormatConverter
 from .core import NullMerger, postprocessor
 from ..io import DataGenerator, DatasetGenerator
 from ..io.loader import adapt_shape_and_stride
@@ -26,7 +29,9 @@ class MultipleSceneModel:
 
     def __init__(self,
                  scene_id_filter=None,
-                 randomize_training=True):
+                 randomize_training=True,
+                 threaded=True,
+                 prefetch_queue_size=None):
         """
 
         :param scene_id_filter: Regex for filtering scenes according to their id (optional)
@@ -35,6 +40,8 @@ class MultipleSceneModel:
 
         self.scene_id_filter = None if not scene_id_filter else re.compile(scene_id_filter)
         self.randomize_training = randomize_training
+        self.threaded = threaded
+        self.prefetch_queue_size = prefetch_queue_size
 
     def predict_scenes_proba(self, scenes, predictor=None):
         """Run the predictor on all input scenes
@@ -99,6 +106,10 @@ class MultipleSceneModel:
         if self.predictor.destination is None:
             self.predictor.destination = self.destination
 
+        if self.threaded:
+            log.info("Using threaded data generator")
+            train_data = ThreadedDataGenerator(train_data, self.prefetch_queue_size)
+            validation_data = ThreadedDataGenerator(validation_data, self.prefetch_queue_size)
         log.info("Running training from %s", trainer.predictor)
         self.predictor.fit_generator(train_data, validation_data, **options)
         log.info("Training completed")
@@ -124,7 +135,7 @@ class CoreScenePredictor(BaseSceneModel):
                  prediction_merger=NullMerger,
                  post_processors=None, # Run after we get the data form predictors
                  pre_processors=None, # Run before sending the data to predictors
-                 format_converter=TrainingCategoricalConverter(2),
+                 format_converter=NullFormatConverter(),
                  metrics=None):
         """
 
